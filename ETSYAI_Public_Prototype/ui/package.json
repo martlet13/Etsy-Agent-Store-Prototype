@@ -1,0 +1,26 @@
+{
+  "name": "spacecommand-ui",
+  "version": "9.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n SERVER,UI \"node server.mjs\" \"vite --host 127.0.0.1 --port 4520\"",
+    "server": "node server.mjs",
+    "ui": "vite --host 127.0.0.1 --port 4520",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4520"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "cors": "latest",
+    "express": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

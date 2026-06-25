@@ -1,0 +1,65 @@
+{
+  "version": "public-prototype-1.0",
+  "connectors": [
+    {
+      "id": "openai_images",
+      "name": "OpenAI Images",
+      "env_var": "OPENAI_API_KEY",
+      "status": "disabled",
+      "approval_required": true,
+      "user_approved": false,
+      "live_actions_enabled": false,
+      "notes": "Optional image generation connector. Add your own key locally."
+    },
+    {
+      "id": "etsy",
+      "name": "Etsy",
+      "env_var": "ETSY_API_KEY",
+      "status": "disabled",
+      "approval_required": true,
+      "user_approved": false,
+      "live_actions_enabled": false,
+      "notes": "Optional Etsy connector. Keep credentials local."
+    },
+    {
+      "id": "printify",
+      "name": "Printify",
+      "env_var": "PRINTIFY_API_KEY",
+      "status": "disabled",
+      "approval_required": true,
+      "user_approved": false,
+      "live_actions_enabled": false,
+      "notes": "Optional Printify connector. Keep credentials local."
+    },
+    {
+      "id": "printful",
+      "name": "Printful",
+      "env_var": "PRINTFUL_API_KEY",
+      "status": "disabled",
+      "approval_required": true,
+      "user_approved": false,
+      "live_actions_enabled": false,
+      "notes": "Optional Printful connector. Keep credentials local."
+    },
+    {
+      "id": "erank",
+      "name": "eRank",
+      "env_var": "ERANK_API_KEY",
+      "status": "disabled",
+      "approval_required": true,
+      "user_approved": false,
+      "live_actions_enabled": false,
+      "notes": "Optional keyword research connector. Keep credentials local."
+    },
+    {
+      "id": "everbee",
+      "name": "EverBee",
+      "env_var": "EVERBEE_API_KEY",
+      "status": "disabled",
+      "approval_required": true,
+      "user_approved": false,
+      "live_actions_enabled": false,
+      "notes": "Optional marketplace research connector. Keep credentials local."
+    }
+  ]
+}

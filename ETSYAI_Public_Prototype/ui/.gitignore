@@ -1,0 +1,48 @@
+# Secrets / local config
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*_api_keys.json
+local_api_keys.json
+
+# Dependencies and builds
+node_modules/
+ui/node_modules/
+dist/
+ui/dist/
+build/
+coverage/
+
+# Generated local output
+_spacecommand_state/generated_assets/
+_spacecommand_state/backups/
+_spacecommand_state/ops_reports/
+_spacecommand_state/*.lock
+_spacecommand_state/*.jsonl
+ui/data/generated-art/
+logs/
+**/logs/
+**/reviews/
+**/briefs/
+**/reports/
+**/packages/
+**/memory/
+**/missions/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.bak
+*.tmp

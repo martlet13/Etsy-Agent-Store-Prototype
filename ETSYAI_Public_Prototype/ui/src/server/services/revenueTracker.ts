@@ -1,0 +1,12 @@
+export declare function calculateOrderProfit(input?: any): any;
+export declare function normalizeSalesOrder(input?: any): any;
+export declare function listSalesOrders(): any[];
+export declare function saveSalesOrders(orders?: any[]): any[];
+export declare function buildRevenueSummary(orders?: any[]): any;
+export declare function updateRevenueSummary(orders?: any[]): any;
+export declare function getRevenueSummary(): any;
+export declare function updateListingPerformance(orders?: any[]): any[];
+export declare function listListingPerformance(): any[];
+export declare function updateMarketPerformanceMemory(orders?: any[]): any[];
+export declare function listMarketPerformanceMemory(): any[];
+export declare function syncEtsyOrders(): Promise<any>;
