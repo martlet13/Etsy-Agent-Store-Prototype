@@ -1,0 +1,11 @@
+# Python dependencies for _core/.
+# Install with: pip install -r requirements.txt
+#
+# Everything else in _core/ uses only the Python standard library
+# (urllib, http.server, json, subprocess) so the room agents and
+# pipeline scripts run with a bare Python 3.11+ install. The one
+# optional-but-recommended dependency is cryptography, used to encrypt
+# Etsy OAuth tokens at rest (etsy_api_client.py). Without it, tokens
+# are still stored locally but with weaker obfuscation instead of real
+# encryption - see docs/SECURITY.md.
+cryptography>=42.0.0

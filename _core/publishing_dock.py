@@ -3,6 +3,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+from api_connector_manager import evaluate_connector, get_connector as get_api_connector
+
 
 ROOT = Path.home() / "Documents" / "Instance" / "SpaceCommand"
 STATE = ROOT / "_spacecommand_state"
@@ -303,6 +305,151 @@ def create_publish_run(
         "result_notes": result_notes,
         "created_at": now_stamp(),
     }
+
+    runs.append(run)
+    save_json(PUBLISH_RUNS_FILE, runs)
+    return run
+
+
+def create_etsy_draft_listing(
+    publish_package_id: str,
+    user_approved_live_action: bool = False,
+    taxonomy_id: int = None,
+    who_made: str = "i_did",
+    when_made: str = "made_to_order",
+    quantity: int = 999,
+    is_digital: bool = False,
+    shipping_profile_id: int = None,
+    return_policy_id: int = None,
+    shop_section_id: int = None,
+) -> Dict[str, Any]:
+    """
+    Turn a local publish_package into a real DRAFT listing on the
+    seller's own Etsy shop, via etsy_api_client.py.
+
+    This is the only function in the repo that is allowed to make a
+    live write call to Etsy, and it is gated on three independent
+    things, all of which must hold:
+      1. The "etsy" connector must be present, have a secret, be marked
+         user_approved, and have live_actions_enabled — i.e. the seller
+         explicitly turned it on (see set_api_connector_approval.py).
+      2. The caller must pass user_approved_live_action=True for this
+         specific call (defense in depth against an automated loop
+         quietly flipping a switch and publishing unattended).
+      3. The publish_package itself must be clean: no issues, and it
+         must trace back through Sentinel-approved copy and a Ledger
+         PASS (create_publish_package() already enforces this when
+         building the package).
+
+    The resulting Etsy listing is always created in `draft` state.
+    Nothing here — or anywhere else in this repo — activates a listing.
+    """
+    runs = load_json(PUBLISH_RUNS_FILE, [])
+    packages = load_json(PUBLISH_PACKAGES_FILE, [])
+    package = find_by_id(packages, publish_package_id)
+
+    issues: List[str] = []
+
+    if not package:
+        issues.append("missing_publish_package")
+    elif package.get("issues"):
+        issues.append("publish_package_has_blocking_issues")
+
+    connector = get_api_connector("etsy")
+    evaluation = evaluate_connector(connector) if connector else None
+    connector_live_ready = bool(evaluation and evaluation.get("computed_status") == "live_enabled")
+
+    if not connector_live_ready:
+        issues.append("etsy_connector_not_live_enabled")
+
+    if not user_approved_live_action:
+        issues.append("missing_user_approval_for_live_action")
+
+    if issues:
+        run = {
+            "id": next_id("PUBRUN", runs),
+            "type": "publish_run",
+            "status": "blocked_etsy_draft_create",
+            "publish_package_id": publish_package_id,
+            "connector_id": "etsy",
+            "action": "create_etsy_listing",
+            "user_approved_live_action": user_approved_live_action,
+            "etsy_draft_created": False,
+            "issues": issues,
+            "created_at": now_stamp(),
+        }
+        runs.append(run)
+        save_json(PUBLISH_RUNS_FILE, runs)
+        return run
+
+    # Import here (not at module load) so this module still imports cleanly
+    # on machines that haven't installed the `cryptography` package yet —
+    # only a live Etsy draft-create call needs it.
+    import etsy_api_client as etsy
+
+    fields = package.get("copy_paste_fields", {})
+    title = fields.get("title") or "Untitled listing"
+    description = fields.get("description") or ""
+    tags = fields.get("tags") or []
+    price = fields.get("price") or 0
+
+    try:
+        listing = etsy.create_draft_listing(
+            title=title,
+            description=description,
+            price=price,
+            quantity=quantity,
+            who_made=who_made,
+            when_made=when_made,
+            taxonomy_id=taxonomy_id,
+            shipping_profile_id=shipping_profile_id,
+            return_policy_id=return_policy_id,
+            tags=tags,
+            is_digital=is_digital,
+            shop_section_id=shop_section_id,
+        )
+
+        listing_id = listing.get("listing_id")
+        image_upload_result = None
+        file_path = package.get("file_path")
+
+        if listing_id and file_path:
+            try:
+                image_upload_result = etsy.upload_listing_image(listing_id, file_path)
+            except Exception as exc:  # noqa: BLE001 - surfaced in result_notes below
+                image_upload_result = {"error": repr(exc)}
+
+        run = {
+            "id": next_id("PUBRUN", runs),
+            "type": "publish_run",
+            "status": "etsy_draft_created",
+            "publish_package_id": publish_package_id,
+            "connector_id": "etsy",
+            "action": "create_etsy_listing",
+            "user_approved_live_action": True,
+            "etsy_draft_created": True,
+            "etsy_listing_id": listing_id,
+            "etsy_listing_state": listing.get("state", "draft"),
+            "etsy_draft_url": etsy.draft_listing_url(listing_id) if listing_id else None,
+            "image_upload_result": image_upload_result,
+            "issues": [],
+            "created_at": now_stamp(),
+        }
+
+    except Exception as exc:  # noqa: BLE001 - we want this recorded, not raised, for the UI/CLI
+        run = {
+            "id": next_id("PUBRUN", runs),
+            "type": "publish_run",
+            "status": "etsy_draft_create_failed",
+            "publish_package_id": publish_package_id,
+            "connector_id": "etsy",
+            "action": "create_etsy_listing",
+            "user_approved_live_action": True,
+            "etsy_draft_created": False,
+            "issues": ["etsy_api_call_failed"],
+            "error": repr(exc),
+            "created_at": now_stamp(),
+        }
 
     runs.append(run)
     save_json(PUBLISH_RUNS_FILE, runs)

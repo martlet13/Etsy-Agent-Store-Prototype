@@ -1,7 +1,8 @@
 import argparse
-import subprocess
 from datetime import datetime
 from pathlib import Path
+
+from llm_backend import call_llm
 
 ROOT = Path.home() / "Documents" / "Instance" / "SpaceCommand"
 QA = ROOT / "04_QARoom"
@@ -11,7 +12,6 @@ AGENT_FILE = QA / "AGENT.md"
 LOG_DIR = QA / "logs"
 REVIEWS_DIR = QA / "reviews"
 
-DEFAULT_MODEL = "qwen2.5-coder:7b"
 
 
 def read_file(path: Path) -> str:
@@ -26,20 +26,6 @@ def append_file(path: Path, content: str) -> None:
     path.write_text(new_content, encoding="utf-8")
 
 
-def call_ollama(model: str, prompt: str) -> str:
-    result = subprocess.run(
-        ["ollama", "run", model],
-        input=prompt,
-        text=True,
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "Ollama call failed.")
-
-    return result.stdout.strip()
 
 
 def build_prompt(item_to_review: str) -> str:
@@ -168,7 +154,9 @@ def route_verdict(response: str) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the SpaceCommand Sentinel QA agent.")
     parser.add_argument("item", nargs="*", help="Item to review")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=None, help="Ollama model name (used when --backend ollama)")
+    parser.add_argument("--backend", default=None, choices=["claude", "ollama"], help="LLM backend. Defaults to Claude if ANTHROPIC_API_KEY is set, else Ollama.")
+    parser.add_argument("--claude-model", default=None, help="Anthropic model id/alias (used when --backend claude)")
     parser.add_argument("--save-review", action="store_true", help="Save review into QA review files")
     args = parser.parse_args()
 
@@ -184,7 +172,7 @@ def main() -> None:
         item = "\n".join(chunks).strip()
 
     prompt = build_prompt(item)
-    response = call_ollama(args.model, prompt)
+    response = call_llm(prompt, backend=args.backend, ollama_model=args.model, claude_model=args.claude_model)
 
     log_path = save_log(item, response)
 

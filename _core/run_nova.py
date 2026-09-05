@@ -1,7 +1,8 @@
 import argparse
-import subprocess
 from datetime import datetime
 from pathlib import Path
+
+from llm_backend import call_llm
 
 ROOT = Path.home() / "Documents" / "Instance" / "SpaceCommand"
 RESEARCH = ROOT / "01_ResearchLab"
@@ -12,7 +13,6 @@ AGENT_FILE = RESEARCH / "AGENT.md"
 LOG_DIR = RESEARCH / "logs"
 BRIEFS_DIR = RESEARCH / "briefs"
 
-DEFAULT_MODEL = "qwen2.5-coder:7b"
 
 
 def read_file(path: Path) -> str:
@@ -27,20 +27,6 @@ def append_file(path: Path, content: str) -> None:
     path.write_text(new_content, encoding="utf-8")
 
 
-def call_ollama(model: str, prompt: str) -> str:
-    result = subprocess.run(
-        ["ollama", "run", model],
-        input=prompt,
-        text=True,
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "Ollama call failed.")
-
-    return result.stdout.strip()
 
 
 def build_prompt(theme: str) -> str:
@@ -152,7 +138,9 @@ def save_brief(response: str, title: str = "Nova Brief") -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the SpaceCommand Nova research agent.")
     parser.add_argument("theme", nargs="*", help="Theme or research request for Nova")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=None, help="Ollama model name (used when --backend ollama)")
+    parser.add_argument("--backend", default=None, choices=["claude", "ollama"], help="LLM backend. Defaults to Claude if ANTHROPIC_API_KEY is set, else Ollama.")
+    parser.add_argument("--claude-model", default=None, help="Anthropic model id/alias (used when --backend claude)")
     parser.add_argument("--save-brief", action="store_true", help="Save response into ResearchLab briefs")
     parser.add_argument("--title", default="Nova Brief", help="Brief title when saving")
     args = parser.parse_args()
@@ -162,7 +150,7 @@ def main() -> None:
         theme = input("Theme for Nova: ").strip()
 
     prompt = build_prompt(theme)
-    response = call_ollama(args.model, prompt)
+    response = call_llm(prompt, backend=args.backend, ollama_model=args.model, claude_model=args.claude_model)
 
     log_path = save_log(theme, response)
 
