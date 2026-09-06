@@ -68,6 +68,38 @@ on it as your only art source or wire it into an unattended loop. Every
 result still lands as a normal `image_asset` pending Sentinel Visual QA,
 exactly like any other image source in this repo.
 
+## Using Claude to review generated art (Visual QA)
+
+Claude has no image-generation API (Anthropic doesn't offer a
+text-to-image model), so it cannot replace ComfyUI/OpenAI/the Qwen-Edit
+Space above. It *can* look at an already-generated image (vision) and
+judge it against the same checklist a human Sentinel reviewer uses.
+`_core/run_claude_visual_qa.py` does this — it never writes a QA report by
+itself; you choose how its proposal gets finalized:
+
+```bash
+cd _core
+# 1. See what Claude thinks, without writing anything:
+python run_claude_visual_qa.py --image-asset-id IMGASSET-0001
+
+# 2a. Autonomous — writes immediately, no human step. Requires an explicit
+#     accept flag so this is never the accidental default:
+python run_claude_visual_qa.py --image-asset-id IMGASSET-0001 \
+  --mode autonomous --i-accept-autonomous-visual-qa
+
+# 2b. Client-confirmed — shows the proposal, lets you edit any field, then
+#     asks for a typed YES before writing (recommended for real listings):
+python run_claude_visual_qa.py --image-asset-id IMGASSET-0001 --mode client_confirm
+```
+
+Either way, the actual pass/fail gate (score thresholds, the
+blocking-checks list, the design production-gate check) is the same
+`sentinel_visual_qa.py` logic a manual `create_visual_qa_report.py` run
+uses — Claude only supplies the inputs a human would have typed, it does
+not weaken the gate. The written report always records which path was
+used (`reviewer: "Claude (autonomous)"` or `"Claude (human-confirmed)"`)
+so it's traceable later who/what approved an asset.
+
 ## Content generation with Claude (instead of Ollama or a ChatGPT web session)
 
 By default the room agents (Nova, Forge, Scribe, Sentinel, etc. in `_core/run_*.py`)

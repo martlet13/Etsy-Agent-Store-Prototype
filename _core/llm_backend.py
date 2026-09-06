@@ -19,12 +19,14 @@ Design principles carried over from the rest of this repo:
   than silently falling back to a different backend.
 """
 
+import base64
 import json
 import os
 import subprocess
 import urllib.error
 import urllib.request
-from typing import Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 DEFAULT_OLLAMA_MODEL = "qwen2.5-coder:7b"
@@ -80,7 +82,7 @@ def call_ollama(model: str, prompt: str) -> str:
     return result.stdout.strip()
 
 
-def call_claude(model: str, prompt: str, max_tokens: int = 4096) -> str:
+def _require_api_key() -> str:
     api_key = get_anthropic_api_key()
 
     if not api_key:
@@ -90,12 +92,10 @@ def call_claude(model: str, prompt: str, max_tokens: int = 4096) -> str:
             "--backend ollama to use a local Ollama model instead."
         )
 
-    payload = {
-        "model": model,
-        "max_tokens": max_tokens,
-        "messages": [{"role": "user", "content": prompt}],
-    }
+    return api_key
 
+
+def _call_anthropic_messages(payload: Dict[str, Any], api_key: str) -> str:
     body = json.dumps(payload).encode("utf-8")
 
     request = urllib.request.Request(
@@ -126,6 +126,65 @@ def call_claude(model: str, prompt: str, max_tokens: int = 4096) -> str:
         raise RuntimeError(f"Claude API returned no text content: {json.dumps(data)[:2000]}")
 
     return "\n".join(text_parts).strip()
+
+
+def call_claude(model: str, prompt: str, max_tokens: int = 4096) -> str:
+    api_key = _require_api_key()
+
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    return _call_anthropic_messages(payload, api_key)
+
+
+_IMAGE_MEDIA_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "gif": "image/gif",
+}
+
+
+def call_claude_vision(model: str, prompt: str, image_path: str, max_tokens: int = 2048) -> str:
+    """
+    Send one image plus a text prompt to Claude (vision) and return its text
+    response. Used for QA/evaluation of an image, not for generating one -
+    Claude has no image generation API (see qwen_edit_style_transfer.py /
+    openai_image_provider.py / ComfyUI for that).
+    """
+    api_key = _require_api_key()
+
+    path = Path(image_path)
+    if not path.exists():
+        raise RuntimeError(f"Image file not found: {image_path}")
+
+    ext = path.suffix.lower().lstrip(".")
+    media_type = _IMAGE_MEDIA_TYPES.get(ext)
+    if not media_type:
+        raise RuntimeError(f"Unsupported image type '{ext}' for Claude vision: {image_path}")
+
+    image_b64 = base64.standard_b64encode(path.read_bytes()).decode("ascii")
+
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": media_type, "data": image_b64},
+                },
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    }
+
+    return _call_anthropic_messages(payload, api_key)
 
 
 def call_llm(
