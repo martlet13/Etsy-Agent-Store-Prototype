@@ -19,6 +19,55 @@ Open the Vite URL shown in the terminal. The local API server uses port `4521` a
 
 The public prototype starts with live connectors disabled. Use it as a local tool first. Do not enable posting, publishing, buying, selling, or messaging until you have tested the workflow and understand the API permissions.
 
+## Generating art without ComfyUI/a GPU
+
+The dashboard's automatic "Products Being Worked On" loop calls ComfyUI at
+`http://127.0.0.1:8188` for art and will show "Waiting for setup" until
+that's reachable. If you don't have a GPU for ComfyUI, generate art
+manually instead (CLI-only, not wired into the dashboard loop yet):
+
+```bash
+cd _core
+python create_image_generation_request.py --design-package-id DESIGN-0001 \
+  --subject "..." --composition "..." --style "..." --color-palette "..." \
+  --text-rules "..." --product-use "..." --aspect-ratio "3:4" \
+  --negative-constraints "..." --quality-bar "..."
+
+python run_image_generation_provider.py --image-request-id IMGREQ-0001 --mode live_api
+```
+
+This uses OpenAI's Images API (`openai_image_provider.py`) — set
+`OPENAI_API_KEY` in `.env.local` and enable the live image budget flag
+(see `image_generation_budget.py` / `_spacecommand_state/image_api_budget.json`)
+first. It has no GPU requirement and doesn't depend on ComfyUI at all.
+
+### Optional: restyle an existing photo with a community Hugging Face Space
+
+If you already have a product photo and just want to restyle it (anime,
+polaroid, pixar, studio relight, upscale, etc.), `run_qwen_edit_style_transfer.py`
+calls the public community Space
+[prithivMLmods/Qwen-Image-Edit-2511-LoRAs-Fast](https://huggingface.co/spaces/prithivMLmods/Qwen-Image-Edit-2511-LoRAs-Fast).
+This edits an existing image — it does not generate art from scratch, so
+it's a style pass on top of art you already have, not a ComfyUI/OpenAI
+replacement.
+
+```bash
+pip install gradio_client
+cd _core
+python run_qwen_edit_style_transfer.py \
+  --image-request-id IMGREQ-0001 \
+  --input-image /path/to/your/photo.png \
+  --prompt "Transform into anime." \
+  --lora-adapter Photo-to-Anime
+```
+
+This calls a free third-party community demo (shared HF ZeroGPU) — it can
+queue, rate-limit, change its API, or go away without notice. It is not a
+paid/guaranteed API like OpenAI Images or your own ComfyUI, so don't rely
+on it as your only art source or wire it into an unattended loop. Every
+result still lands as a normal `image_asset` pending Sentinel Visual QA,
+exactly like any other image source in this repo.
+
 ## Content generation with Claude (instead of Ollama or a ChatGPT web session)
 
 By default the room agents (Nova, Forge, Scribe, Sentinel, etc. in `_core/run_*.py`)

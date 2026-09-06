@@ -9,3 +9,9 @@
 # are still stored locally but with weaker obfuscation instead of real
 # encryption - see docs/SECURITY.md.
 cryptography>=42.0.0
+
+# Optional. Only needed for _core/run_qwen_edit_style_transfer.py, which
+# calls a third-party community Hugging Face Space to style-transfer an
+# existing product photo. Not required for the main pipeline (ComfyUI or
+# openai_image_provider.py cover normal art generation).
+gradio_client>=1.0.0
