@@ -331,7 +331,11 @@ def _request(
     headers = dict(headers or {})
 
     if authenticated:
-        headers["x-api-key"] = get_keystring()
+        # Etsy requires "keystring:shared_secret" in x-api-key since the
+        # shared-secret enforcement rollout (completed 2026-02-09) - a bare
+        # keystring now gets rejected with 403 "Shared secret is required
+        # in x-api-key header." See https://developer.etsy.com/documentation/essentials/authentication
+        headers["x-api-key"] = f"{get_keystring()}:{get_shared_secret()}"
         headers["Authorization"] = f"Bearer {get_valid_access_token()}"
 
     last_error: Optional[Exception] = None
