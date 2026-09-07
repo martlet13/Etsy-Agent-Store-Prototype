@@ -242,6 +242,19 @@ configured, so the pipeline never hard-stops on a missing key.
    `--refresh-settings`. It also now accepts `--materials`,
    `--item-weight`/`--item-length`/`--item-width`/`--item-height` (+
    their unit flags), and `--personalizable` if you need them.
-8. Open the printed draft URL in Etsy Seller Manager, review it, and
+8. Add more photos to the draft (e.g. Curator interior mockups —
+   Etsy allows up to 20 per listing, and `create_etsy_draft.py` only
+   uploads the one "featured" primary photo):
+   ```bash
+   python generate_interior_mockup.py --image-asset-id IMGASSET-0001 --room-style warm_neutral --frame-style black
+   python add_etsy_listing_images.py \
+     --etsy-listing-id <the numeric id create_etsy_draft.py printed, e.g. 4570931272> \
+     --mockup-id MOCKUP-0001 \
+     --i-approve-this-live-etsy-action
+   ```
+   `--mockup-id` / `--image-asset-id` / `--image-path` are all repeatable
+   and can be mixed in one call. This never changes the listing's
+   `state` — it only adds photos to a draft that already exists.
+9. Open the printed draft URL in Etsy Seller Manager, review it, and
    activate it yourself when you're happy with it. Nothing in this
    repo can do that step for you.

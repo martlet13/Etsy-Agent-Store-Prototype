@@ -478,6 +478,95 @@ def create_etsy_draft_listing(
     return run
 
 
+def add_etsy_listing_images(
+    etsy_listing_id: int,
+    image_paths: List[str],
+    user_approved_live_action: bool = False,
+    starting_rank: int = 2,
+) -> Dict[str, Any]:
+    """
+    Upload additional photos (e.g. Curator interior mockups, alternate
+    angles) to an EXISTING Etsy draft listing — a listing already
+    created by create_etsy_draft_listing() above. Etsy allows up to 20
+    photos per listing; rank 1 is normally the "featured" primary photo
+    uploaded when the draft was first created, so this defaults to
+    starting at rank 2 and incrementing.
+
+    Gated the same way as create_etsy_draft_listing(): the "etsy"
+    connector must be live-approved, and the caller must explicitly
+    pass user_approved_live_action=True. This never changes a listing's
+    `state` — it only adds photos to whatever draft already exists.
+    """
+    runs = load_json(PUBLISH_RUNS_FILE, [])
+
+    issues: List[str] = []
+
+    if not etsy_listing_id:
+        issues.append("missing_etsy_listing_id")
+    if not image_paths:
+        issues.append("no_image_paths_provided")
+
+    connector = get_api_connector("etsy")
+    evaluation = evaluate_connector(connector) if connector else None
+    connector_live_ready = bool(evaluation and evaluation.get("computed_status") == "live_enabled")
+
+    if not connector_live_ready:
+        issues.append("etsy_connector_not_live_enabled")
+
+    if not user_approved_live_action:
+        issues.append("missing_user_approval_for_live_action")
+
+    if issues:
+        run = {
+            "id": next_id("PUBRUN", runs),
+            "type": "publish_run",
+            "status": "blocked_add_etsy_listing_images",
+            "etsy_listing_id": etsy_listing_id,
+            "connector_id": "etsy",
+            "action": "add_etsy_listing_images",
+            "user_approved_live_action": user_approved_live_action,
+            "images_uploaded": [],
+            "issues": issues,
+            "created_at": now_stamp(),
+        }
+        runs.append(run)
+        save_json(PUBLISH_RUNS_FILE, runs)
+        return run
+
+    import etsy_api_client as etsy
+
+    uploaded = []
+    upload_errors = []
+
+    for offset, image_path in enumerate(image_paths):
+        rank = starting_rank + offset
+        try:
+            result = etsy.upload_listing_image(int(etsy_listing_id), image_path, rank=rank)
+            uploaded.append({"file_path": image_path, "rank": rank, "listing_image_id": result.get("listing_image_id")})
+        except Exception as exc:  # noqa: BLE001 - collected below, one bad image shouldn't abort the rest
+            upload_errors.append({"file_path": image_path, "rank": rank, "error": repr(exc)})
+
+    run = {
+        "id": next_id("PUBRUN", runs),
+        "type": "publish_run",
+        "status": "etsy_listing_images_added" if uploaded and not upload_errors else (
+            "etsy_listing_images_partially_added" if uploaded else "etsy_listing_images_add_failed"
+        ),
+        "etsy_listing_id": etsy_listing_id,
+        "connector_id": "etsy",
+        "action": "add_etsy_listing_images",
+        "user_approved_live_action": True,
+        "images_uploaded": uploaded,
+        "upload_errors": upload_errors,
+        "issues": [] if uploaded else ["etsy_api_call_failed"],
+        "created_at": now_stamp(),
+    }
+
+    runs.append(run)
+    save_json(PUBLISH_RUNS_FILE, runs)
+    return run
+
+
 def audit_publishing() -> Dict[str, Any]:
     packages = load_json(PUBLISH_PACKAGES_FILE, [])
     runs = load_json(PUBLISH_RUNS_FILE, [])
