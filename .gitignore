@@ -17,6 +17,9 @@ build/
 coverage/
 
 # Generated local output
+_spacecommand_state/.etsy_token_key
+_spacecommand_state/etsy_oauth_tokens.enc
+_spacecommand_state/etsy_oauth_state.json
 _spacecommand_state/generated_assets/
 _spacecommand_state/backups/
 _spacecommand_state/ops_reports/

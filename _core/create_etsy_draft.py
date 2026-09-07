@@ -20,6 +20,8 @@ def main():
     parser.add_argument("--digital", action="store_true", help="Mark this as a digital listing (skips shipping profile).")
     parser.add_argument("--shipping-profile-id", type=int, default=None)
     parser.add_argument("--return-policy-id", type=int, default=None)
+    parser.add_argument("--readiness-state-id", type=int, default=None,
+                         help="Etsy processing-profile id, required for physical listings since Etsy's readiness-state migration. See get_readiness_state_definitions()/create_readiness_state_definition() in etsy_api_client.py.")
     parser.add_argument("--shop-section-id", type=int, default=None)
 
     args = parser.parse_args()
@@ -43,6 +45,7 @@ def main():
         is_digital=args.digital,
         shipping_profile_id=args.shipping_profile_id,
         return_policy_id=args.return_policy_id,
+        readiness_state_id=args.readiness_state_id,
         shop_section_id=args.shop_section_id,
     )
 

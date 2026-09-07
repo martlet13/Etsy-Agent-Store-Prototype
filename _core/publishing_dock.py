@@ -225,7 +225,7 @@ def create_publish_package(
             "title": listing.get("title") if listing else "",
             "description": listing.get("description") if listing else "",
             "tags": listing.get("tags") if listing else [],
-            "price": economics.get("recommended_price") if economics else None,
+            "price": economics.get("item_price") if economics else None,
             "sku": f"{design.get('id')}-{asset.get('id')}" if design else "",
         },
         "upload_checklist": [
@@ -321,6 +321,7 @@ def create_etsy_draft_listing(
     is_digital: bool = False,
     shipping_profile_id: int = None,
     return_policy_id: int = None,
+    readiness_state_id: int = None,
     shop_section_id: int = None,
 ) -> Dict[str, Any]:
     """
@@ -404,6 +405,7 @@ def create_etsy_draft_listing(
             taxonomy_id=taxonomy_id,
             shipping_profile_id=shipping_profile_id,
             return_policy_id=return_policy_id,
+            readiness_state_id=readiness_state_id,
             tags=tags,
             is_digital=is_digital,
             shop_section_id=shop_section_id,

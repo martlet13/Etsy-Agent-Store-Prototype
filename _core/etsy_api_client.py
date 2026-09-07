@@ -421,6 +421,45 @@ def get_return_policies(shop_id: Optional[str] = None) -> List[Dict[str, Any]]:
     return result.get("results", [])
 
 
+def get_readiness_state_definitions(shop_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Processing profiles ("readiness state definitions"). Etsy requires
+    every physical listing to link one via readiness_state_id — see
+    https://developer.etsy.com/documentation/tutorials/migration
+    """
+    shop_id = shop_id or get_shop_id()
+    result = _get(f"/shops/{shop_id}/readiness-state-definitions")
+    return result.get("results", [])
+
+
+def create_readiness_state_definition(
+    readiness_state: str,
+    min_processing_time: int,
+    max_processing_time: int,
+    processing_time_unit: str = "days",
+    shop_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Create (or, if an identical one exists, hit a 409 pointing at the
+    existing one) a processing profile for this shop. `readiness_state`
+    must be "ready_to_ship" or "made_to_order".
+    """
+    shop_id = shop_id or get_shop_id()
+    fields = {
+        "readiness_state": readiness_state,
+        "min_processing_time": str(int(min_processing_time)),
+        "max_processing_time": str(int(max_processing_time)),
+        "processing_time_unit": processing_time_unit,
+    }
+    body = urllib.parse.urlencode(fields).encode("utf-8")
+    return _request(
+        f"{ETSY_API_BASE}/shops/{shop_id}/readiness-state-definitions",
+        method="POST",
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Draft listing creation — the only write action this client performs
 # ---------------------------------------------------------------------------
@@ -435,6 +474,7 @@ def create_draft_listing(
     taxonomy_id: int,
     shipping_profile_id: Optional[int] = None,
     return_policy_id: Optional[int] = None,
+    readiness_state_id: Optional[int] = None,
     materials: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
     is_digital: bool = False,
@@ -466,6 +506,11 @@ def create_draft_listing(
 
     if shipping_profile_id and not is_digital:
         payload["shipping_profile_id"] = int(shipping_profile_id)
+    if readiness_state_id and not is_digital:
+        # Required by Etsy for physical listings since the processing
+        # profiles migration — see get_readiness_state_definitions() /
+        # create_readiness_state_definition() above.
+        payload["readiness_state_id"] = int(readiness_state_id)
     if return_policy_id:
         payload["return_policy_id"] = int(return_policy_id)
     if materials:
