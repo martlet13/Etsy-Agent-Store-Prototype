@@ -143,19 +143,38 @@ configured, so the pipeline never hard-stops on a missing key.
 5. Run the normal local pipeline (evidence → opportunity → design →
    Ledger PASS → `run_scribe_on_design.py` → `create_publish_package.py`)
    until you have a `publish_package` with no issues.
-6. Create the real draft listing (this is the only script in the repo
+6. (Optional but recommended) Auto-resolve the Etsy "Selected category"
+   (taxonomy_id) plus shipping profile / return policy / processing
+   ("readiness state") profile for this design package once, instead of
+   looking each one up by hand:
+   ```bash
+   python prepare_etsy_listing_settings.py --design-package-id DESIGN-0001
+   ```
+   This reads your shop's real taxonomy tree and scores every category
+   against the design's title/concept/product_fit keywords, picks your
+   shop's default shipping profile and return policy, and reuses (or
+   creates, if none exists yet) a `made_to_order`/`ready_to_ship`
+   processing profile. It prints the top match plus alternatives —
+   review them before drafting; nothing here writes to a listing. The
+   result is cached in `_spacecommand_state/etsy_listing_settings.json`
+   keyed by design_package_id.
+7. Create the real draft listing (this is the only script in the repo
    that writes to Etsy, and it only ever creates a `draft`):
    ```bash
    python create_etsy_draft.py \
      --publish-package-id PUBPKG-0001 \
-     --taxonomy-id <etsy_taxonomy_id> \
      --i-approve-this-live-etsy-action
    ```
-   Look up taxonomy IDs for your product type with
-   `etsy_api_client.get_seller_taxonomy_nodes()`, and shipping
-   profile / return policy / shop section IDs with the matching
-   `get_shipping_profiles()` / `get_return_policies()` /
-   `get_shop_sections()` helpers in the same file.
-7. Open the printed draft URL in Etsy Seller Manager, review it, and
+   If you ran step 6, `create_etsy_draft.py` automatically reuses that
+   cached category/shipping/return/readiness-state settings — no need to
+   pass `--taxonomy-id` etc. by hand. If you skip step 6, it resolves
+   them on the spot the first time it's run for that design package. You
+   can still override any individual field with `--taxonomy-id`,
+   `--shipping-profile-id`, `--return-policy-id`, `--readiness-state-id`,
+   or `--shop-section-id`, or force a fresh lookup with
+   `--refresh-settings`. It also now accepts `--materials`,
+   `--item-weight`/`--item-length`/`--item-width`/`--item-height` (+
+   their unit flags), and `--personalizable` if you need them.
+8. Open the printed draft URL in Etsy Seller Manager, review it, and
    activate it yourself when you're happy with it. Nothing in this
    repo can do that step for you.

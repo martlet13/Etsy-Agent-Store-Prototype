@@ -323,6 +323,16 @@ def create_etsy_draft_listing(
     return_policy_id: int = None,
     readiness_state_id: int = None,
     shop_section_id: int = None,
+    materials: List[str] = None,
+    item_weight: float = None,
+    item_length: float = None,
+    item_width: float = None,
+    item_height: float = None,
+    item_weight_unit: str = None,
+    item_dimensions_unit: str = None,
+    is_personalizable: bool = False,
+    personalization_is_required: bool = False,
+    personalization_instructions: str = None,
 ) -> Dict[str, Any]:
     """
     Turn a local publish_package into a real DRAFT listing on the
@@ -409,6 +419,16 @@ def create_etsy_draft_listing(
             tags=tags,
             is_digital=is_digital,
             shop_section_id=shop_section_id,
+            materials=materials,
+            item_weight=item_weight,
+            item_length=item_length,
+            item_width=item_width,
+            item_height=item_height,
+            item_weight_unit=item_weight_unit,
+            item_dimensions_unit=item_dimensions_unit,
+            is_personalizable=is_personalizable,
+            personalization_is_required=personalization_is_required,
+            personalization_instructions=personalization_instructions,
         )
 
         listing_id = listing.get("listing_id")

@@ -409,6 +409,107 @@ def get_properties_by_taxonomy_id(taxonomy_id: int) -> List[Dict[str, Any]]:
     return result.get("results", [])
 
 
+def flatten_taxonomy_tree(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Flatten Etsy's nested seller-taxonomy tree into a flat list of
+    {id, name, path, depth, is_leaf} records, so category matching can
+    just scan a flat list instead of re-walking the tree every time.
+    """
+    flat: List[Dict[str, Any]] = []
+
+    def walk(node: Dict[str, Any], depth: int, path: str) -> None:
+        name = node.get("name", "")
+        full_path = f"{path} > {name}" if path else name
+        children = node.get("children") or []
+
+        flat.append({
+            "id": node.get("id"),
+            "name": name,
+            "path": full_path,
+            "depth": depth,
+            "is_leaf": len(children) == 0,
+        })
+
+        for child in children:
+            walk(child, depth + 1, full_path)
+
+    for top_level in nodes:
+        walk(top_level, 0, "")
+
+    return flat
+
+
+def suggest_taxonomy_matches(
+    keywords: List[str],
+    nodes: Optional[List[Dict[str, Any]]] = None,
+    top_n: int = 5,
+) -> List[Dict[str, Any]]:
+    """
+    Suggest the best "Selected category" (taxonomy_id) candidates for a
+    listing by scoring every node in the seller's taxonomy tree against
+    free-text keywords (e.g. derived from a design package's title,
+    design concept, and product_fit). This never calls Etsy's write
+    endpoints — it only reads the taxonomy tree — but it still needs a
+    live, approved connector since get_seller_taxonomy_nodes() is a
+    real API call.
+
+    Scoring is intentionally simple and transparent: for every keyword
+    that appears as a substring of a node's full breadcrumb path, add a
+    point; leaf categories (no children) get a small bonus since Etsy
+    listings must use a specific/leaf category, not a broad parent.
+    Callers should treat the top result as a suggestion, not a silent
+    auto-decision — always show the alternatives to a human before a
+    live draft is created with an unfamiliar keyword set.
+    """
+    nodes = nodes if nodes is not None else get_seller_taxonomy_nodes()
+    flat = flatten_taxonomy_tree(nodes)
+
+    cleaned_keywords = [k.strip().lower() for k in keywords if k and k.strip()]
+    if not cleaned_keywords:
+        return []
+
+    scored = []
+    for entry in flat:
+        path_lower = entry["path"].lower()
+        hits = [kw for kw in cleaned_keywords if kw in path_lower]
+
+        if not hits:
+            continue
+
+        score = len(hits) + (0.5 if entry["is_leaf"] else 0.0)
+        scored.append({**entry, "score": score, "matched_keywords": hits})
+
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    return scored[:top_n]
+
+
+def suggest_shop_section(
+    keywords: List[str],
+    shop_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Best-effort match of a shop_section_id from the shop's own section
+    titles. Returns None (no auto-pick) when nothing matches, rather
+    than guessing — an unmatched/wrong section is low-stakes (cosmetic
+    shop organization) but still shouldn't be invented.
+    """
+    sections = get_shop_sections(shop_id=shop_id)
+    cleaned_keywords = [k.strip().lower() for k in keywords if k and k.strip()]
+
+    best = None
+    best_score = 0
+
+    for section in sections:
+        title_lower = str(section.get("title", "")).lower()
+        score = sum(1 for kw in cleaned_keywords if kw and kw in title_lower)
+
+        if score > best_score:
+            best = section
+            best_score = score
+
+    return best
+
+
 def get_shipping_profiles(shop_id: Optional[str] = None) -> List[Dict[str, Any]]:
     shop_id = shop_id or get_shop_id()
     result = _get(f"/shops/{shop_id}/shipping-profiles")
@@ -419,6 +520,69 @@ def get_return_policies(shop_id: Optional[str] = None) -> List[Dict[str, Any]]:
     shop_id = shop_id or get_shop_id()
     result = _get(f"/shops/{shop_id}/policies/return")
     return result.get("results", [])
+
+
+def get_default_shipping_profile(shop_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Pick the shop's default shipping profile so callers don't have to
+    look up shipping_profile_id by hand for every listing. Prefers a
+    profile literally named "default" (case-insensitive); otherwise
+    falls back to the first non-deleted profile on the shop. Returns
+    None if the shop has no shipping profiles yet (the seller must
+    create one in Etsy Seller Manager before physical listings work).
+    """
+    profiles = [p for p in get_shipping_profiles(shop_id=shop_id) if not p.get("is_deleted")]
+
+    if not profiles:
+        return None
+
+    for profile in profiles:
+        if "default" in str(profile.get("title", "")).lower():
+            return profile
+
+    return profiles[0]
+
+
+def get_default_return_policy(shop_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Pick the shop's return policy. Most shops only have one (Etsy
+    requires shops selling to EU buyers to have exactly one active
+    return policy), so "first" is the correct default in practice.
+    Returns None if the shop has no return policy configured yet.
+    """
+    policies = get_return_policies(shop_id=shop_id)
+    return policies[0] if policies else None
+
+
+def get_or_create_default_readiness_state(
+    readiness_state: str = "made_to_order",
+    min_processing_time: int = 3,
+    max_processing_time: int = 5,
+    processing_time_unit: str = "days",
+    shop_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Reuse an existing processing profile that matches `readiness_state`
+    if the shop already has one, otherwise create it. This is what a
+    seller would otherwise have to do once by hand in Seller Manager
+    (or by manually calling createShopReadinessStateDefinition) before
+    every physical listing could be drafted via the API — see
+    docs/SETUP.md and the 2026 processing-profiles migration notes in
+    create_readiness_state_definition() above.
+    """
+    existing = get_readiness_state_definitions(shop_id=shop_id)
+
+    for definition in existing:
+        if definition.get("readiness_state") == readiness_state:
+            return definition
+
+    return create_readiness_state_definition(
+        readiness_state=readiness_state,
+        min_processing_time=min_processing_time,
+        max_processing_time=max_processing_time,
+        processing_time_unit=processing_time_unit,
+        shop_id=shop_id,
+    )
 
 
 def get_readiness_state_definitions(shop_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -479,6 +643,16 @@ def create_draft_listing(
     tags: Optional[List[str]] = None,
     is_digital: bool = False,
     shop_section_id: Optional[int] = None,
+    item_weight: Optional[float] = None,
+    item_length: Optional[float] = None,
+    item_width: Optional[float] = None,
+    item_height: Optional[float] = None,
+    item_weight_unit: Optional[str] = None,
+    item_dimensions_unit: Optional[str] = None,
+    is_personalizable: bool = False,
+    personalization_is_required: bool = False,
+    personalization_instructions: Optional[str] = None,
+    personalization_char_count_max: Optional[int] = None,
     shop_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -519,6 +693,32 @@ def create_draft_listing(
         payload["tags"] = [t[:20] for t in tags[:13]]
     if shop_section_id:
         payload["shop_section_id"] = int(shop_section_id)
+
+    # Weight/dimensions matter for physical prints (framed vs. unframed,
+    # rolled tube shipping, etc.) — previously not exposed at all, so
+    # every listing silently omitted them even when known.
+    if item_weight is not None:
+        payload["item_weight"] = float(item_weight)
+    if item_length is not None:
+        payload["item_length"] = float(item_length)
+    if item_width is not None:
+        payload["item_width"] = float(item_width)
+    if item_height is not None:
+        payload["item_height"] = float(item_height)
+    if item_weight_unit:
+        payload["item_weight_unit"] = item_weight_unit
+    if item_dimensions_unit:
+        payload["item_dimensions_unit"] = item_dimensions_unit
+
+    # Personalization (e.g. "add a custom name") — previously not
+    # exposed at all.
+    if is_personalizable:
+        payload["is_personalizable"] = True
+        payload["personalization_is_required"] = bool(personalization_is_required)
+        if personalization_instructions:
+            payload["personalization_instructions"] = personalization_instructions
+        if personalization_char_count_max is not None:
+            payload["personalization_char_count_max"] = int(personalization_char_count_max)
 
     return _post_json(f"/shops/{shop_id}/listings", payload)
 
