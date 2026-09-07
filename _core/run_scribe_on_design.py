@@ -218,8 +218,8 @@ def create_listing_draft(
 
     if not economics:
         issues.append("missing_unit_economics")
-    elif economics.get("decision") != "PASS":
-        issues.append(f"ledger_not_passed:{economics.get('decision')}")
+    elif economics.get("ledger_decision") != "PASS":
+        issues.append(f"ledger_not_passed:{economics.get('ledger_decision')}")
 
     if design and not design.get("production_allowed", False):
         issues.append("design_production_gate_false")

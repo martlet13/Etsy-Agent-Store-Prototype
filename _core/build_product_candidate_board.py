@@ -84,7 +84,7 @@ def build_board():
             next_action = "wait_for_generated_image_asset"
         elif not qa:
             next_action = "sentinel_visual_qa"
-        elif not econ or econ.get("decision") != "PASS":
+        elif not econ or econ.get("ledger_decision") != "PASS":
             next_action = "ledger_costs_required"
             blocked_reasons.append("ledger_not_passed")
         elif not listing or not listing.get("listing_allowed", False):
@@ -109,7 +109,7 @@ def build_board():
             "image_run_status": run.get("status") if run else None,
             "image_asset_id": asset.get("id") if asset else None,
             "qa_status": qa.get("status") if qa else None,
-            "ledger_status": econ.get("decision") if econ else None,
+            "ledger_status": econ.get("ledger_decision") if econ else None,
             "listing_status": listing.get("status") if listing else None,
             "publisher_status": pub.get("status") if pub else None,
             "next_action": next_action,

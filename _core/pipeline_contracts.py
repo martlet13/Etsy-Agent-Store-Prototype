@@ -428,6 +428,9 @@ def audit_pipeline() -> Dict[str, Any]:
                     "message": "Ledger decision is PASS but listing_allowed is false.",
                 })
 
+    economics_ids = {econ.get("id") for econ in economics}
+    economics_by_id = {econ.get("id"): econ for econ in economics}
+
     for listing in listings:
         listing_id = listing.get("id")
         econ_id = listing.get("unit_economics_card_id")
@@ -450,7 +453,7 @@ def audit_pipeline() -> Dict[str, Any]:
                 })
         elif listing_allowed:
             econ = economics_by_id.get(econ_id, {})
-            if econ.get("decision") != "PASS":
+            if econ.get("ledger_decision") != "PASS":
                 findings.append({
                     "severity": "blocker",
                     "code": "listing_allowed_without_ledger_pass",
