@@ -68,6 +68,73 @@ on it as your only art source or wire it into an unattended loop. Every
 result still lands as a normal `image_asset` pending Sentinel Visual QA,
 exactly like any other image source in this repo.
 
+## Curator: quality analysis, enhancement, print-size export, interior mockups
+
+`curator_image_kernel.py` and its four CLI scripts do local image
+processing on any existing `image_asset` — no network calls, no
+connector approval needed, just Pillow + numpy on this machine:
+
+```bash
+pip install Pillow numpy   # or: pip install -r requirements.txt
+cd _core
+```
+
+**1. Analyze quality, print-size DPI fit, and border artifacts (read-only):**
+
+```bash
+python analyze_image_asset.py --image-asset-id IMGASSET-0001
+```
+
+Reports a sharpness/noise/contrast score, checks the image's effective
+DPI against common Etsy print sizes (4x6 through 18x24), and scans all
+four edges for a prominent brightness "step" — the kind a scanned
+institutional citation banner, watermark strip, or scan-bed margin
+leaves — suggesting a crop box to remove it. It's a suggestion only;
+nothing is written to the image.
+
+**2. Enhance (sharpen/denoise/contrast/crop) — always creates a new derived asset:**
+
+```bash
+python enhance_image_asset.py --image-asset-id IMGASSET-0001 --crop auto
+```
+
+`--crop auto` reuses the border-step suggestion from step 1; `--crop
+explicit --crop-box left,top,right,bottom` lets you specify one by hand.
+The result is a brand-new `image_asset` linked back via
+`derived_from_image_asset_id` — it does **not** inherit the source
+asset's Visual QA approval; run Sentinel Visual QA on the new asset
+before using it as a mockup or product image.
+
+**3. Export exact print-ready sizes at a target DPI:**
+
+```bash
+python export_print_format_assets.py --image-asset-id IMGASSET-0001 \
+  --formats 8x10,11x14,16x20 --dpi 300
+```
+
+Each size becomes its own new `image_asset` (again pending fresh Visual
+QA). If the source resolution can't honestly hit the requested DPI for a
+given size, the asset is flagged `needs_upscale` instead of silently
+stretching the image — the printed notes point you at
+`run_qwen_edit_style_transfer.py --lora-adapter Upscaler` (see above) as
+one option if you need more real pixels before printing that large.
+
+**4. Generate an interior placement mockup:**
+
+```bash
+python generate_interior_mockup.py --image-asset-id IMGASSET-0001 \
+  --room-style warm_neutral --frame-style black
+```
+
+Composites the art into a procedurally-rendered "framed print on a
+wall" scene (gradient wall, soft drop shadow, mat + frame, floor line) —
+useful for a listing's secondary photos, but it's a rendered scene, not
+a photograph. Room styles: `warm_neutral`, `cool_gallery`, `sage_green`,
+`charcoal_modern`, `blush_studio`. Frame styles: `black`, `white`,
+`natural_wood`, `walnut`, `none`. Results are recorded separately in
+`_spacecommand_state/mockup_assets.json` (not gated by Ledger/Sentinel —
+they're marketing collateral, not a print-ready master).
+
 ## Using Claude to review generated art (Visual QA)
 
 Claude has no image-generation API (Anthropic doesn't offer a

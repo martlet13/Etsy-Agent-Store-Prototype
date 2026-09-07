@@ -15,3 +15,12 @@ cryptography>=42.0.0
 # existing product photo. Not required for the main pipeline (ComfyUI or
 # openai_image_provider.py cover normal art generation).
 gradio_client>=1.0.0
+
+# Optional. Only needed for Curator's local image-processing scripts:
+# analyze_image_asset.py, enhance_image_asset.py,
+# export_print_format_assets.py, generate_interior_mockup.py
+# (curator_image_kernel.py). These do real local image analysis,
+# sharpening/denoise/cropping, print-size export, and procedural
+# interior-mockup rendering entirely on this machine - no network calls.
+Pillow>=10.0.0
+numpy>=1.26.0
