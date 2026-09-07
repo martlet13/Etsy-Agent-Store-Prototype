@@ -3,6 +3,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+from api_connector_manager import evaluate_connector, get_connector as get_api_connector
+
 
 ROOT = Path.home() / "Documents" / "Instance" / "SpaceCommand"
 STATE = ROOT / "_spacecommand_state"
@@ -181,8 +183,8 @@ def create_publish_package(
 
     if not economics:
         issues.append("missing_unit_economics")
-    elif economics.get("decision") != "PASS":
-        issues.append(f"ledger_not_passed:{economics.get('decision')}")
+    elif economics.get("ledger_decision") != "PASS":
+        issues.append(f"ledger_not_passed:{economics.get('ledger_decision')}")
 
     listing = None
 
@@ -223,7 +225,7 @@ def create_publish_package(
             "title": listing.get("title") if listing else "",
             "description": listing.get("description") if listing else "",
             "tags": listing.get("tags") if listing else [],
-            "price": economics.get("recommended_price") if economics else None,
+            "price": economics.get("item_price") if economics else None,
             "sku": f"{design.get('id')}-{asset.get('id')}" if design else "",
         },
         "upload_checklist": [
@@ -301,6 +303,262 @@ def create_publish_run(
         "user_approved_live_action": user_approved_live_action,
         "issues": issues,
         "result_notes": result_notes,
+        "created_at": now_stamp(),
+    }
+
+    runs.append(run)
+    save_json(PUBLISH_RUNS_FILE, runs)
+    return run
+
+
+def create_etsy_draft_listing(
+    publish_package_id: str,
+    user_approved_live_action: bool = False,
+    taxonomy_id: int = None,
+    who_made: str = "i_did",
+    when_made: str = "made_to_order",
+    quantity: int = 999,
+    is_digital: bool = False,
+    shipping_profile_id: int = None,
+    return_policy_id: int = None,
+    readiness_state_id: int = None,
+    shop_section_id: int = None,
+    materials: List[str] = None,
+    item_weight: float = None,
+    item_length: float = None,
+    item_width: float = None,
+    item_height: float = None,
+    item_weight_unit: str = None,
+    item_dimensions_unit: str = None,
+    is_personalizable: bool = False,
+    personalization_is_required: bool = False,
+    personalization_instructions: str = None,
+) -> Dict[str, Any]:
+    """
+    Turn a local publish_package into a real DRAFT listing on the
+    seller's own Etsy shop, via etsy_api_client.py.
+
+    This is the only function in the repo that is allowed to make a
+    live write call to Etsy, and it is gated on three independent
+    things, all of which must hold:
+      1. The "etsy" connector must be present, have a secret, be marked
+         user_approved, and have live_actions_enabled — i.e. the seller
+         explicitly turned it on (see set_api_connector_approval.py).
+      2. The caller must pass user_approved_live_action=True for this
+         specific call (defense in depth against an automated loop
+         quietly flipping a switch and publishing unattended).
+      3. The publish_package itself must be clean: no issues, and it
+         must trace back through Sentinel-approved copy and a Ledger
+         PASS (create_publish_package() already enforces this when
+         building the package).
+
+    The resulting Etsy listing is always created in `draft` state.
+    Nothing here — or anywhere else in this repo — activates a listing.
+    """
+    runs = load_json(PUBLISH_RUNS_FILE, [])
+    packages = load_json(PUBLISH_PACKAGES_FILE, [])
+    package = find_by_id(packages, publish_package_id)
+
+    issues: List[str] = []
+
+    if not package:
+        issues.append("missing_publish_package")
+    elif package.get("issues"):
+        issues.append("publish_package_has_blocking_issues")
+
+    connector = get_api_connector("etsy")
+    evaluation = evaluate_connector(connector) if connector else None
+    connector_live_ready = bool(evaluation and evaluation.get("computed_status") == "live_enabled")
+
+    if not connector_live_ready:
+        issues.append("etsy_connector_not_live_enabled")
+
+    if not user_approved_live_action:
+        issues.append("missing_user_approval_for_live_action")
+
+    if issues:
+        run = {
+            "id": next_id("PUBRUN", runs),
+            "type": "publish_run",
+            "status": "blocked_etsy_draft_create",
+            "publish_package_id": publish_package_id,
+            "connector_id": "etsy",
+            "action": "create_etsy_listing",
+            "user_approved_live_action": user_approved_live_action,
+            "etsy_draft_created": False,
+            "issues": issues,
+            "created_at": now_stamp(),
+        }
+        runs.append(run)
+        save_json(PUBLISH_RUNS_FILE, runs)
+        return run
+
+    # Import here (not at module load) so this module still imports cleanly
+    # on machines that haven't installed the `cryptography` package yet —
+    # only a live Etsy draft-create call needs it.
+    import etsy_api_client as etsy
+
+    fields = package.get("copy_paste_fields", {})
+    title = fields.get("title") or "Untitled listing"
+    description = fields.get("description") or ""
+    tags = fields.get("tags") or []
+    price = fields.get("price") or 0
+
+    try:
+        listing = etsy.create_draft_listing(
+            title=title,
+            description=description,
+            price=price,
+            quantity=quantity,
+            who_made=who_made,
+            when_made=when_made,
+            taxonomy_id=taxonomy_id,
+            shipping_profile_id=shipping_profile_id,
+            return_policy_id=return_policy_id,
+            readiness_state_id=readiness_state_id,
+            tags=tags,
+            is_digital=is_digital,
+            shop_section_id=shop_section_id,
+            materials=materials,
+            item_weight=item_weight,
+            item_length=item_length,
+            item_width=item_width,
+            item_height=item_height,
+            item_weight_unit=item_weight_unit,
+            item_dimensions_unit=item_dimensions_unit,
+            is_personalizable=is_personalizable,
+            personalization_is_required=personalization_is_required,
+            personalization_instructions=personalization_instructions,
+        )
+
+        listing_id = listing.get("listing_id")
+        image_upload_result = None
+        file_path = package.get("file_path")
+
+        if listing_id and file_path:
+            try:
+                image_upload_result = etsy.upload_listing_image(listing_id, file_path)
+            except Exception as exc:  # noqa: BLE001 - surfaced in result_notes below
+                image_upload_result = {"error": repr(exc)}
+
+        run = {
+            "id": next_id("PUBRUN", runs),
+            "type": "publish_run",
+            "status": "etsy_draft_created",
+            "publish_package_id": publish_package_id,
+            "connector_id": "etsy",
+            "action": "create_etsy_listing",
+            "user_approved_live_action": True,
+            "etsy_draft_created": True,
+            "etsy_listing_id": listing_id,
+            "etsy_listing_state": listing.get("state", "draft"),
+            "etsy_draft_url": etsy.draft_listing_url(listing_id) if listing_id else None,
+            "image_upload_result": image_upload_result,
+            "issues": [],
+            "created_at": now_stamp(),
+        }
+
+    except Exception as exc:  # noqa: BLE001 - we want this recorded, not raised, for the UI/CLI
+        run = {
+            "id": next_id("PUBRUN", runs),
+            "type": "publish_run",
+            "status": "etsy_draft_create_failed",
+            "publish_package_id": publish_package_id,
+            "connector_id": "etsy",
+            "action": "create_etsy_listing",
+            "user_approved_live_action": True,
+            "etsy_draft_created": False,
+            "issues": ["etsy_api_call_failed"],
+            "error": repr(exc),
+            "created_at": now_stamp(),
+        }
+
+    runs.append(run)
+    save_json(PUBLISH_RUNS_FILE, runs)
+    return run
+
+
+def add_etsy_listing_images(
+    etsy_listing_id: int,
+    image_paths: List[str],
+    user_approved_live_action: bool = False,
+    starting_rank: int = 2,
+) -> Dict[str, Any]:
+    """
+    Upload additional photos (e.g. Curator interior mockups, alternate
+    angles) to an EXISTING Etsy draft listing — a listing already
+    created by create_etsy_draft_listing() above. Etsy allows up to 20
+    photos per listing; rank 1 is normally the "featured" primary photo
+    uploaded when the draft was first created, so this defaults to
+    starting at rank 2 and incrementing.
+
+    Gated the same way as create_etsy_draft_listing(): the "etsy"
+    connector must be live-approved, and the caller must explicitly
+    pass user_approved_live_action=True. This never changes a listing's
+    `state` — it only adds photos to whatever draft already exists.
+    """
+    runs = load_json(PUBLISH_RUNS_FILE, [])
+
+    issues: List[str] = []
+
+    if not etsy_listing_id:
+        issues.append("missing_etsy_listing_id")
+    if not image_paths:
+        issues.append("no_image_paths_provided")
+
+    connector = get_api_connector("etsy")
+    evaluation = evaluate_connector(connector) if connector else None
+    connector_live_ready = bool(evaluation and evaluation.get("computed_status") == "live_enabled")
+
+    if not connector_live_ready:
+        issues.append("etsy_connector_not_live_enabled")
+
+    if not user_approved_live_action:
+        issues.append("missing_user_approval_for_live_action")
+
+    if issues:
+        run = {
+            "id": next_id("PUBRUN", runs),
+            "type": "publish_run",
+            "status": "blocked_add_etsy_listing_images",
+            "etsy_listing_id": etsy_listing_id,
+            "connector_id": "etsy",
+            "action": "add_etsy_listing_images",
+            "user_approved_live_action": user_approved_live_action,
+            "images_uploaded": [],
+            "issues": issues,
+            "created_at": now_stamp(),
+        }
+        runs.append(run)
+        save_json(PUBLISH_RUNS_FILE, runs)
+        return run
+
+    import etsy_api_client as etsy
+
+    uploaded = []
+    upload_errors = []
+
+    for offset, image_path in enumerate(image_paths):
+        rank = starting_rank + offset
+        try:
+            result = etsy.upload_listing_image(int(etsy_listing_id), image_path, rank=rank)
+            uploaded.append({"file_path": image_path, "rank": rank, "listing_image_id": result.get("listing_image_id")})
+        except Exception as exc:  # noqa: BLE001 - collected below, one bad image shouldn't abort the rest
+            upload_errors.append({"file_path": image_path, "rank": rank, "error": repr(exc)})
+
+    run = {
+        "id": next_id("PUBRUN", runs),
+        "type": "publish_run",
+        "status": "etsy_listing_images_added" if uploaded and not upload_errors else (
+            "etsy_listing_images_partially_added" if uploaded else "etsy_listing_images_add_failed"
+        ),
+        "etsy_listing_id": etsy_listing_id,
+        "connector_id": "etsy",
+        "action": "add_etsy_listing_images",
+        "user_approved_live_action": True,
+        "images_uploaded": uploaded,
+        "upload_errors": upload_errors,
+        "issues": [] if uploaded else ["etsy_api_call_failed"],
         "created_at": now_stamp(),
     }
 

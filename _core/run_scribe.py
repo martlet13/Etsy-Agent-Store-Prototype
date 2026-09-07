@@ -1,7 +1,8 @@
 import argparse
-import subprocess
 from datetime import datetime
 from pathlib import Path
+
+from llm_backend import call_llm
 
 ROOT = Path.home() / "Documents" / "Instance" / "SpaceCommand"
 
@@ -15,7 +16,6 @@ AGENT_FILE = SCRIBE / "AGENT.md"
 LOG_DIR = SCRIBE / "logs"
 SPECS_DIR = SCRIBE / "specs"
 
-DEFAULT_MODEL = "qwen2.5-coder:7b"
 
 
 def read_file(path: Path) -> str:
@@ -30,20 +30,6 @@ def append_file(path: Path, content: str) -> None:
     path.write_text(new_content, encoding="utf-8")
 
 
-def call_ollama(model: str, prompt: str) -> str:
-    result = subprocess.run(
-        ["ollama", "run", model],
-        input=prompt,
-        text=True,
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "Ollama call failed.")
-
-    return result.stdout.strip()
 
 
 def build_prompt(request: str) -> str:
@@ -189,7 +175,9 @@ def save_spec(response: str, title: str = "Scribe Spec") -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the SpaceCommand Scribe spec agent.")
     parser.add_argument("request", nargs="*", help="Request for Scribe")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=None, help="Ollama model name (used when --backend ollama)")
+    parser.add_argument("--backend", default=None, choices=["claude", "ollama"], help="LLM backend. Defaults to Claude if ANTHROPIC_API_KEY is set, else Ollama.")
+    parser.add_argument("--claude-model", default=None, help="Anthropic model id/alias (used when --backend claude)")
     parser.add_argument("--save-spec", action="store_true", help="Save response into Scribe specs")
     parser.add_argument("--title", default="Scribe Spec", help="Spec title when saving")
     args = parser.parse_args()
@@ -199,7 +187,7 @@ def main() -> None:
         request = input("Request for Scribe: ").strip()
 
     prompt = build_prompt(request)
-    response = call_ollama(args.model, prompt)
+    response = call_llm(prompt, backend=args.backend, ollama_model=args.model, claude_model=args.claude_model)
 
     log_path = save_log(request, response)
 

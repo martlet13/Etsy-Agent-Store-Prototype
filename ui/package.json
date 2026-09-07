@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n SERVER,UI \"node server.mjs\" \"vite --host 127.0.0.1 --port 4520\"",
+    "dev:cloud": "concurrently -k -n SERVER,UI \"HOST=0.0.0.0 node server.mjs\" \"vite --host 0.0.0.0 --port 4520\"",
     "server": "node server.mjs",
     "ui": "vite --host 127.0.0.1 --port 4520",
     "build": "vite build",

@@ -6037,8 +6037,9 @@ app.post("/api/lifecycle", async (req, res) => {
   });
 });
 
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`SpaceCommand local API running on http://127.0.0.1:${PORT}`);
+const HOST = process.env.HOST || "127.0.0.1";
+app.listen(PORT, HOST, () => {
+  console.log(`SpaceCommand local API running on http://${HOST}:${PORT}`);
   const state = loadShiftState();
   if (state.status === "running") {
     startShiftLoop(state.limits?.tick_interval_ms || DEFAULT_SHIFT_TICK_INTERVAL_MS, "shift_loop_resumed_after_server_start");

@@ -12,6 +12,16 @@
       "notes": "Optional image generation connector. Add your own key locally."
     },
     {
+      "id": "anthropic_content",
+      "name": "Claude (Anthropic API)",
+      "env_var": "ANTHROPIC_API_KEY",
+      "status": "disabled",
+      "approval_required": true,
+      "user_approved": false,
+      "live_actions_enabled": false,
+      "notes": "Optional listing-copy and room-agent text generation connector, used by llm_backend.py instead of a local Ollama model. Add your own Anthropic API key locally."
+    },
+    {
       "id": "etsy",
       "name": "Etsy",
       "env_var": "ETSY_API_KEY",

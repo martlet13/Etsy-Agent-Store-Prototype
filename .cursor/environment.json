@@ -1,0 +1,15 @@
+{
+  "name": "SpaceCommand",
+  "install": "cd ui && npm install && cd .. && (pip install -r requirements.txt || pip install --user -r requirements.txt)",
+  "terminals": [
+    {
+      "name": "spacecommand-ui",
+      "command": "cd ui && npm run dev:cloud",
+      "description": "Runs the SpaceCommand Express API server (port 4521) and the Vite UI dev server (port 4520), both bound to 0.0.0.0 so the Cloud Agent port-forwarding declared below can reach them."
+    }
+  ],
+  "ports": [
+    { "name": "SpaceCommand UI (Vite)", "port": 4520 },
+    { "name": "SpaceCommand API (Express)", "port": 4521 }
+  ]
+}
